@@ -100,6 +100,15 @@ positive-react/
 
 ---
 
+## 🌐 Despliegue en GitHub Pages (CI/CD)
+
+El proyecto incluye un pipeline automatizado con **GitHub Actions** para compilar y desplegar en GitHub Pages automáticamente con cada `push` a la rama `main`.
+
+👉 Consulta la guía paso a paso en [DEPLOY.md](./DEPLOY.md).
+
+---
+
 ## 📄 Licencia
 
 Este proyecto es de uso libre bajo fines educativos o personales.
+
