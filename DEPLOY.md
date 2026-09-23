@@ -1,106 +1,211 @@
 # 🚀 Guía de Despliegue en GitHub Pages con CI/CD
 
-Esta guía detalla los pasos para publicar y desplegar automáticamente la aplicación **Positive React** en **GitHub Pages** utilizando **GitHub Actions** para integración y entrega continua (CI/CD).
+Esta guía detalla la configuración y el flujo de publicación continua de **Positive React** en **GitHub Pages** utilizando **GitHub Actions** (CI/CD).
+
+* **Repositorio:** [github.com/javieronishi/positive-react](https://github.com/javieronishi/positive-react)
+* **URL de Producción:** [https://javieronishi.github.io/positive-react/](https://javieronishi.github.io/positive-react/)
 
 ---
 
-## ⚙️ 1. Configuración Ya Integrada en el Proyecto
+## ⚙️ 1. Configuración Integrada en el Proyecto
 
-El proyecto ya cuenta con los dos elementos esenciales listos:
+El proyecto ya cuenta con la infraestructura lista para producción en GitHub Pages:
 
-1. **Rutas relativas en [vite.config.ts](file:///home/javier/Code/positive-react/vite.config.ts):**
-   ```ts
-   export default defineConfig({
-     plugins: [react()],
-     base: './', // Permite que los scripts y estilos carguen sin importar el nombre del repo
-   })
-   ```
+### 1. Rutas relativas en [vite.config.ts](file:///home/javier/Code/positive-react/vite.config.ts)
+```ts
+export default defineConfig({
+  plugins: [react()],
+  base: './', // Garantiza que assets, scripts y estilos resuelvan correctamente bajo subcarpetas (/positive-react/)
+})
+```
 
-2. **Pipeline de GitHub Actions en [.github/workflows/deploy.yml](file:///home/javier/Code/positive-react/.github/workflows/deploy.yml):**
-   - Se ejecuta automáticamente ante cada `push` a la rama `main`.
-   - Instala dependencias (`npm ci`).
-   - Valida la calidad del código (`npm run lint`).
-   - Compila la versión de producción (`npm run build`).
-   - Despliega el artefacto en GitHub Pages sin requerir ramas intermedias como `gh-pages`.
+### 2. Pipeline de CI/CD en [.github/workflows/deploy.yml](file:///home/javier/Code/positive-react/.github/workflows/deploy.yml)
+
+El flujo de trabajo se divide en dos fases (**build** y **deploy**) y está estructurado de la siguiente forma:
+
+```yaml
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main            # Se ejecuta con cada push a la rama principal
+  workflow_dispatch:    # Permite ejecución manual desde la pestaña 'Actions' en GitHub
+
+permissions:
+  contents: read        # Lectura del código del repositorio
+  pages: write          # Permiso para escribir en GitHub Pages
+  id-token: write       # Autenticación OIDC segura con GitHub Pages
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true  # Si hay múltiples pushes seguidos, cancela el anterior y despliega el último
+```
+
+#### Fases del Workflow:
+
+1. **Job `build` (Construcción y Control de Calidad):**
+   - **Checkout:** Clona el código fuente usando `actions/checkout@v4`.
+   - **Node.js:** Configura Node.js versión `20` con caché nativa de `npm` (`actions/setup-node@v4`).
+   - **Instalación:** Ejecuta `npm ci` para instalar exactamente las versiones fijadas en `package-lock.json`.
+   - **Linter:** Ejecuta `npm run lint` (`eslint .`) para asegurar que el código cumpla los estándares antes de compilar.
+   - **Compilación:** Ejecuta `npm run build` (`tsc -b && vite build`), verificando tipos de TypeScript y generando el bundle optimizado en `./dist`.
+   - **Artefacto:** Prepara y sube la carpeta `./dist` con `actions/upload-pages-artifact@v3`.
+
+2. **Job `deploy` (Publicación):**
+   - Se ejecuta únicamente si el job `build` finaliza con éxito (`needs: build`).
+   - Se asocia al entorno `github-pages`.
+   - Despliega el artefacto en los servidores de GitHub Pages mediante `actions/deploy-pages@v4` y expone la URL pública final.
 
 ---
 
-## 📋 2. Pasos para Publicar el Proyecto
+## 📋 2. Pasos para la Configuración Inicial (Solo la primera vez)
 
-### Paso 1: Crear el primer commit local
+> [!NOTE]
+> En este repositorio el código ya está vinculado y subido a la rama `main`. Solo asegúrate de haber realizado el **Paso 4** en la web de GitHub.
 
-Abre tu terminal en la raíz del proyecto y ejecuta:
-
+### Paso 1: Confirmar cambios locales *(ya realizado)*
 ```bash
-# 1. Agregar todos los archivos al área de preparación
 git add .
-
-# 2. Confirmar los cambios con un mensaje descriptivo
 git commit -m "feat: interfaz moderna, compartir en redes y CI/CD para GitHub Pages"
 ```
 
----
+### Paso 2: Crear el repositorio en GitHub *(ya realizado)*
+- Repositorio público: `positive-react`.
 
-### Paso 2: Crear el repositorio en GitHub
-
-1. Ingresa a tu cuenta en [github.com/new](https://github.com/new).
-2. **Repository name:** Escribe el nombre del proyecto (por ejemplo: `positive-react`).
-3. **Visibility:** Selecciona **Public** *(en cuentas personales gratuitas, GitHub Pages requiere que el repositorio sea público)*.
-4. **Importante:** **NO** marques las opciones *Add a README file*, *Add .gitignore* ni *Choose a license*, ya que el proyecto ya las contiene localmente.
-5. Haz clic en el botón verde **Create repository**.
-
----
-
-### Paso 3: Conectar el repositorio y subir el código
-
-En tu terminal, ejecuta los siguientes comandos sustituyendo `<tu-usuario>` por tu nombre de usuario en GitHub y `<nombre-repo>` por el nombre que le diste al repositorio:
-
+### Paso 3: Vincular y subir rama principal *(ya realizado)*
 ```bash
-# Asegurarse de que la rama principal se llame main
 git branch -M main
-
-# Vincular tu repositorio local con el repositorio remoto en GitHub
-git remote add origin https://github.com/<tu-usuario>/<nombre-repo>.git
-
-# Subir tu código a la rama main
+git remote add origin git@github.com:javieronishi/positive-react.git
 git push -u origin main
 ```
 
----
+### Paso 4: Habilitar GitHub Pages desde GitHub Actions ⚠️ *(Paso Clave)*
 
-### Paso 4: Habilitar GitHub Pages desde GitHub Actions
+Para que el workflow tenga autorización de publicar la web:
 
-1. Ve a la página de tu repositorio en GitHub.
-2. Haz clic en la pestaña **Settings** (Configuración en la barra superior).
-3. En el menú lateral izquierdo, dentro de la sección **Code and automation**, haz clic en **Pages**.
-4. En el apartado **Build and deployment**:
-   - En el menú desplegable **Source**, selecciona: **GitHub Actions** *(en lugar de "Deploy from a branch")*.
-5. Guarda los cambios si es necesario (generalmente se aplica de forma automática).
+1. Ve a [github.com/javieronishi/positive-react/settings/pages](https://github.com/javieronishi/positive-react/settings/pages).
+2. En el apartado **Build and deployment**:
+   - En el menú desplegable **Source**, selecciona: **GitHub Actions** *(no "Deploy from a branch")*.
+3. Guarda los cambios si es necesario.
 
 ---
 
-## 🔄 3. ¿Cómo Funciona el CI/CD a Partir de Ahora?
+## 🔄 3. Flujo de Trabajo Diario (CI/CD Automático)
 
-A partir de este momento, cada vez que hagas un cambio y lo subas:
+Cada vez que realices mejoras en la aplicación:
 
 ```bash
+# 1. Realiza tus modificaciones y confírmalas
 git add .
-git commit -m "fix: ajuste menor"
-git push
+git commit -m "feat: nueva frase motivacional o ajuste de diseño"
+
+# 2. Sube los cambios
+git push origin main
 ```
 
-1. GitHub Actions detectará el `push` automáticamente.
-2. Puedes ver el avance en tiempo real en la pestaña **Actions** de tu repositorio.
-3. Al terminar (tarda menos de 1 minuto), el sitio estará actualizado en:
+1. **Detección automática:** GitHub Actions iniciará inmediatamente el pipeline.
+2. **Seguimiento en vivo:** Puedes observar el progreso en la pestaña [Actions](https://github.com/javieronishi/positive-react/actions).
+3. **Despliegue completado:** En menos de 1 minuto, la web se actualizará automáticamente en:
    ```text
-   https://<tu-usuario>.github.io/<nombre-repo>/
+   https://javieronishi.github.io/positive-react/
+   ```
+
+### ⚡ Ejecución Manual del Despliegue (`workflow_dispatch`)
+Gracias al disparador `workflow_dispatch`, si deseas forzar un nuevo despliegue sin realizar un commit:
+1. Ve a la pestaña **Actions** en tu repositorio en GitHub.
+2. Selecciona **Deploy to GitHub Pages** en la barra lateral izquierda.
+3. Haz clic en el botón desplegable **Run workflow**, elige la rama `main` y presiona el botón verde **Run workflow**.
+
+---
+
+## 🔐 4. Manejo de Variables de Entorno (.env y GitHub Secrets)
+
+### 🚫 ¿Por qué NUNCA se debe subir el archivo `.env`?
+El archivo `.env` suele contener claves de API, URLs privadas o configuraciones específicas de tu entorno local. Si lo subes a GitHub:
+- Quedará registrado en el historial de Git (incluso si lo borras en un commit posterior).
+- Estará expuesto públicamente si el repositorio es abierto.
+
+**Regla de oro:** El archivo `.env` siempre debe estar incluido en [.gitignore](file:///home/javier/Code/positive-react/.gitignore). Como buena práctica, puedes subir un archivo plantilla llamado `.env.example` sin valores sensibles:
+
+```env
+# .env.example (este archivo sí se sube a GitHub como referencia)
+VITE_API_URL=https://api.ejemplo.com
+VITE_ANALYTICS_ID=tu_id_aqui
+```
+
+---
+
+### ⚙️ Cómo agregar Variables y Secretos en GitHub
+
+Para que GitHub Actions tenga acceso a estas variables durante el despliegue:
+
+1. Ve a tu repositorio en GitHub: [github.com/javieronishi/positive-react](https://github.com/javieronishi/positive-react).
+2. Haz clic en **Settings** > en el menú lateral selecciona **Secrets and variables** > **Actions**.
+3. Elige el tipo según la sensibilidad del dato:
+   - **Secrets (Recomendado para datos confidenciales):** Haz clic en **New repository secret**. El valor se almacena encriptado y nunca se mostrará en los logs.
+   - **Variables (Para configuraciones públicas):** Haz clic en la pestaña **Variables** > **New repository variable**.
+
+---
+
+### 📥 Cómo inyectar las Variables en [.github/workflows/deploy.yml](file:///home/javier/Code/positive-react/.github/workflows/deploy.yml)
+
+En aplicaciones construidas con Vite, las variables de entorno se incrustan en el código empaquetado **durante la compilación** (`npm run build`).
+
+Debes pasarlas dentro del paso `Compilar proyecto` en el archivo de workflow:
+
+```yaml
+      - name: Compilar proyecto
+        run: npm run build
+        env:
+          # Para valores guardados en Secrets:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          
+          # Para valores guardados en Variables públicas:
+          VITE_APP_TITLE: ${{ vars.VITE_APP_TITLE }}
+```
+
+---
+
+### 📌 Reglas de Vite en el Código React
+
+1. **Prefijo obligatorio `VITE_`:** Vite solo expone al cliente las variables que comiencen con `VITE_`:
+   ```ts
+   // Uso en tus componentes React:
+   const apiUrl = import.meta.env.VITE_API_URL;
+   ```
+2. **Desarrollo local:** En tu máquina creas el archivo `.env` en la raíz del proyecto:
+   ```env
+   VITE_API_URL=https://api.ejemplo.com
    ```
 
 ---
 
-## 🛠️ 4. Solución de Dudas Frecuentes
+### ⚠️ Advertencia Crítica de Seguridad en Frontend (SPA)
 
-* **¿Por qué la página me da error 404 al abrirla recién terminada la acción?**
-  GitHub Pages puede tardar entre 1 y 2 minutos en propagar los DNS la primera vez que se publica. Espera un par de minutos y refresca con `Ctrl + F5` (o `Cmd + Shift + R`).
-* **¿Qué pasa si el linter falla durante el despliegue?**
-  El pipeline cancelará el despliegue automáticamente para evitar publicar código con errores. Puedes ejecutar `npm run lint` localmente para corregirlos antes de hacer `git push`.
+> [!CAUTION]
+> **Todo lo que usa React / Vite se ejecuta en el navegador del usuario final.**
+> Aunque una variable provenga de un *GitHub Secret*, cuando Vite ejecuta `npm run build`, reemplaza el código con el valor en texto plano dentro de los archivos JavaScript finales en `./dist`.
+>
+> - **SÍ puedes guardar en el frontend:** URLs de APIs públicas, Firebase Public Keys, IDs de Google Analytics o temas visuales.
+> - **NUNCA pongas en el frontend:** Claves privadas de backend (como `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, contraseñas de bases de datos o tokens con permisos administrativos). Cualquier usuario puede verlas abriendo la consola o el inspector del navegador. Esos secretos deben residir exclusivamente en un servidor backend.
+
+---
+
+## 🛠️ 5. Solución de Problemas Frecuentes
+
+* **Error `403: Not allowed to deploy to github-pages environment` en la Action:**
+  - **Causa:** No se configuró el origen de GitHub Pages en modo Actions.
+  - **Solución:** Revisa el **Paso 4** y asegúrate de que en *Settings > Pages > Source* esté seleccionado **GitHub Actions**.
+
+* **El workflow falla en el paso `npm ci`:**
+  - **Causa:** Se modificó `package.json` manualmente sin regenerar `package-lock.json`.
+  - **Solución:** Corre `npm install` localmente para sincronizar el lockfile y sube el commit resultante (`git add package.json package-lock.json && git commit -m "fix: sync package-lock"`).
+
+* **El workflow falla en `npm run lint` o `npm run build`:**
+  - **Causa:** Hay errores de linting o errores de tipos de TypeScript (`tsc -b`).
+  - **Solución:** Ejecuta `npm run lint` y `npm run build` en tu terminal local para identificar y corregir el error antes de hacer `push`. El pipeline detiene el despliegue a propósito para evitar publicar código roto.
+
+* **Error 404 la primera vez que visitas la URL:**
+  - **Causa:** GitHub Pages puede tardar de 1 a 2 minutos en propagar el DNS la primera vez que se publica el sitio.
+  - **Solución:** Espera un par de minutos y recarga la página forzando la limpieza de caché con `Ctrl + F5` (o `Cmd + Shift + R`).
